@@ -21,6 +21,7 @@ from utils import (
     get_callable_grasping_cost_fn,
     print_opt_debug_dict,
 )
+import time
 
 class Main:
     def __init__(self, scene_file, visualize=False):
@@ -64,7 +65,12 @@ class Main:
         # = keypoint proposal and constraint generation
         # ====================================
         if rekep_program_dir is None:
+            # print(f"points: {points}")
+            print(f"points.shape: {points.shape}")
+            time_start = time.time()
             keypoints, projected_img = self.keypoint_proposer.get_keypoints(rgb, points, mask)
+            time_end = time.time()
+            print(f"time cost: {1000 * (time_end - time_start)} ms")
             print(f'{bcolors.HEADER}Got {len(keypoints)} proposed keypoints{bcolors.ENDC}')
             if self.visualize:
                 self.visualizer.show_img(projected_img)
