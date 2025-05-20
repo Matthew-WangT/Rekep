@@ -152,41 +152,73 @@ class ReKepOGEnv:
             None
         Given a set of keypoints in the world frame, this function registers them so that their newest positions can be accessed later.
         """
+        # 确保输入的关键点是一个 numpy 数组
         if not isinstance(keypoints, np.ndarray):
             keypoints = np.array(keypoints)
+        
+        # 将关键点存储在实例变量中
         self.keypoints = keypoints
-        self._keypoint_registry = dict()
-        self._keypoint2object = dict()
+        
+        # 初始化字典，用于存储关键点的相关信息
+        self._keypoint_registry = dict()  # 存储每个关键点的最近物体路径和初始姿态
+        self._keypoint2object = dict()    # 存储每个关键点对应的最近物体
+        
+        # 定义需要排除的物体名称列表
         exclude_names = ['wall', 'floor', 'ceiling', 'table', 'fetch', 'robot']
+        
+        # 遍历每个关键点
         for idx, keypoint in enumerate(keypoints):
+            # 初始化最近距离为无穷大
             closest_distance = np.inf
+            
+            # 遍历场景中的每个物体
             for obj in self.og_env.scene.objects:
+                # 如果物体名称在排除列表中，则跳过该物体
                 if any([name in obj.name.lower() for name in exclude_names]):
                     continue
+                
+                # 遍历物体的每个链接
                 for link in obj.links.values():
+                    # 遍历链接的每个可视化网格
                     for mesh in link.visual_meshes.values():
+                        # 获取网格的路径和类型
                         mesh_prim_path = mesh.prim_path
                         mesh_type = mesh.prim.GetPrimTypeInfo().GetTypeName()
+                        
+                        # 根据网格类型转换为 trimesh 对象
                         if mesh_type == 'Mesh':
                             trimesh_object = mesh_prim_mesh_to_trimesh_mesh(mesh.prim)
                         else:
                             trimesh_object = mesh_prim_shape_to_trimesh_mesh(mesh.prim)
+                        
+                        # 获取网格在世界坐标系中的变换，并应用到 trimesh 对象上
                         world_pose_w_scale = PoseAPI.get_world_pose_with_scale(mesh.prim_path)
                         trimesh_object.apply_transform(world_pose_w_scale)
+                        
+                        # 从网格中采样 1000 个点
                         points_transformed = trimesh_object.sample(1000)
                         
-                        # find closest point
+                        # 计算采样点与当前关键点之间的距离
                         dists = np.linalg.norm(points_transformed - keypoint, axis=1)
+                        
+                        # 找到距离最小的点
                         point = points_transformed[np.argmin(dists)]
                         distance = np.linalg.norm(point - keypoint)
+                        
+                        # 如果找到更近的点，则更新最近距离和相关信息
                         if distance < closest_distance:
                             closest_distance = distance
                             closest_prim_path = mesh_prim_path
                             closest_point = point
                             closest_obj = obj
+            
+            # 将最近的物体路径和姿态存储在 _keypoint_registry 中
             self._keypoint_registry[idx] = (closest_prim_path, PoseAPI.get_world_pose(closest_prim_path))
+            
+            # 将最近的物体存储在 _keypoint2object 中
             self._keypoint2object[idx] = closest_obj
-            # overwrite the keypoint with the closest point
+            
+            # 用最近的点覆盖原始关键点位置
             self.keypoints[idx] = closest_point
 
     def get_keypoint_positions(self):

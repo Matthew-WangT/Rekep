@@ -25,22 +25,23 @@ import time
 
 class Main:
     def __init__(self, scene_file, visualize=False):
+        # 加载全局配置
         global_config = get_config(config_path="./configs/config.yaml")
         self.config = global_config['main']
         self.bounds_min = np.array(self.config['bounds_min'])
         self.bounds_max = np.array(self.config['bounds_max'])
-        self.visualize = visualize
-        # set random seed
+        self.visualize = visualize 
+        # 设置随机种子
         np.random.seed(self.config['seed'])
         torch.manual_seed(self.config['seed'])
         torch.cuda.manual_seed(self.config['seed'])
-        # initialize keypoint proposer and constraint generator
+        # 初始化关键点提议器和约束生成器
         self.keypoint_proposer = KeypointProposer(global_config['keypoint_proposer'])
         self.constraint_generator = ConstraintGenerator(global_config['constraint_generator'])
-        # initialize environment
+        # 初始化环境
         self.env = ReKepOGEnv(global_config['env'], scene_file, verbose=False)
-        # setup ik solver (for reachability cost)
-        assert isinstance(self.env.robot, Fetch), "The IK solver assumes the robot is a Fetch robot"
+        # 设置逆运动学求解器（用于可达性成本）
+        assert isinstance(self.env.robot, Fetch), "IK求解器假设机器人是Fetch机器人"
         ik_solver = IKSolver(
             robot_description_path=self.env.robot.robot_arm_descriptor_yamls[self.env.robot.default_arm],
             robot_urdf_path=self.env.robot.urdf_path,
@@ -48,24 +49,24 @@ class Main:
             reset_joint_pos=self.env.reset_joint_pos,
             world2robot_homo=self.env.world2robot_homo,
         )
-        # initialize solvers
+        # 初始化子目标求解器和路径求解器
         self.subgoal_solver = SubgoalSolver(global_config['subgoal_solver'], ik_solver, self.env.reset_joint_pos)
         self.path_solver = PathSolver(global_config['path_solver'], ik_solver, self.env.reset_joint_pos)
-        # initialize visualizer
+        # 初始化可视化工具
         if self.visualize:
             self.visualizer = Visualizer(global_config['visualizer'], self.env)
 
     def perform_task(self, instruction, rekep_program_dir=None, disturbance_seq=None):
+        # 重置环境
         self.env.reset()
         cam_obs = self.env.get_cam_obs()
         rgb = cam_obs[self.config['vlm_camera']]['rgb']
         points = cam_obs[self.config['vlm_camera']]['points']
         mask = cam_obs[self.config['vlm_camera']]['seg']
         # ====================================
-        # = keypoint proposal and constraint generation
+        # = 关键点提议和约束生成
         # ====================================
         if rekep_program_dir is None:
-            # print(f"points: {points}")
             print(f"points.shape: {points.shape}")
             time_start = time.time()
             keypoints, projected_img = self.keypoint_proposer.get_keypoints(rgb, points, mask)
@@ -78,50 +79,50 @@ class Main:
             rekep_program_dir = self.constraint_generator.generate(projected_img, instruction, metadata)
             print(f'{bcolors.HEADER}Constraints generated{bcolors.ENDC}')
         # ====================================
-        # = execute
+        # = 执行任务
         # ====================================
         self._execute(rekep_program_dir, disturbance_seq)
 
     def _update_disturbance_seq(self, stage, disturbance_seq):
+        # 更新干扰序列
         if disturbance_seq is not None:
             if stage in disturbance_seq and not self.applied_disturbance[stage]:
-                # set the disturbance sequence, the generator will yield and instantiate one disturbance function for each env.step until it is exhausted
                 self.env.disturbance_seq = disturbance_seq[stage](self.env)
                 self.applied_disturbance[stage] = True
 
     def _execute(self, rekep_program_dir, disturbance_seq=None):
-        # load metadata
+        # 加载元数据
         with open(os.path.join(rekep_program_dir, 'metadata.json'), 'r') as f:
             self.program_info = json.load(f)
         self.applied_disturbance = {stage: False for stage in range(1, self.program_info['num_stages'] + 1)}
-        # register keypoints to be tracked
+        # 注册需要跟踪的关键点
         self.env.register_keypoints(self.program_info['init_keypoint_positions'])
-        # load constraints
+        # 加载约束
         self.constraint_fns = dict()
-        for stage in range(1, self.program_info['num_stages'] + 1):  # stage starts with 1
+        for stage in range(1, self.program_info['num_stages'] + 1):
             stage_dict = dict()
             for constraint_type in ['subgoal', 'path']:
                 load_path = os.path.join(rekep_program_dir, f'stage{stage}_{constraint_type}_constraints.txt')
-                get_grasping_cost_fn = get_callable_grasping_cost_fn(self.env)  # special grasping function for VLM to call
+                get_grasping_cost_fn = get_callable_grasping_cost_fn(self.env)
                 stage_dict[constraint_type] = load_functions_from_txt(load_path, get_grasping_cost_fn) if os.path.exists(load_path) else []
             self.constraint_fns[stage] = stage_dict
         
-        # bookkeeping of which keypoints can be moved in the optimization
+        # 记录哪些关键点在优化中可以移动
         self.keypoint_movable_mask = np.zeros(self.program_info['num_keypoints'] + 1, dtype=bool)
-        self.keypoint_movable_mask[0] = True  # first keypoint is always the ee, so it's movable
+        self.keypoint_movable_mask[0] = True  # 第一个关键点总是末端执行器，因此是可移动的
 
-        # main loop
+        # 主循环
         self.last_sim_step_counter = -np.inf
         self._update_stage(1)
         while True:
             scene_keypoints = self.env.get_keypoint_positions()
-            self.keypoints = np.concatenate([[self.env.get_ee_pos()], scene_keypoints], axis=0)  # first keypoint is always the ee
+            self.keypoints = np.concatenate([[self.env.get_ee_pos()], scene_keypoints], axis=0)
             self.curr_ee_pose = self.env.get_ee_pose()
             self.curr_joint_pos = self.env.get_arm_joint_postions()
             self.sdf_voxels = self.env.get_sdf_voxels(self.config['sdf_voxel_size'])
             self.collision_points = self.env.get_collision_points()
             # ====================================
-            # = decide whether to backtrack
+            # = 决定是否回溯
             # ====================================
             backtrack = False
             if self.stage > 1:
@@ -132,13 +133,11 @@ class Main:
                         backtrack = True
                         break
             if backtrack:
-                # determine which stage to backtrack to based on constraints
+                # 根据约束决定回溯到哪个阶段
                 for new_stage in range(self.stage - 1, 0, -1):
                     path_constraints = self.constraint_fns[new_stage]['path']
-                    # if no constraints, we can safely backtrack
                     if len(path_constraints) == 0:
                         break
-                    # otherwise, check if all constraints are satisfied
                     all_constraints_satisfied = True
                     for constraints in path_constraints:
                         violation = constraints(self.keypoints[0], self.keypoints[1:])
@@ -150,10 +149,10 @@ class Main:
                 print(f"{bcolors.HEADER}[stage={self.stage}] backtrack to stage {new_stage}{bcolors.ENDC}")
                 self._update_stage(new_stage)
             else:
-                # apply disturbance
+                # 应用干扰
                 self._update_disturbance_seq(self.stage, disturbance_seq)
                 # ====================================
-                # = get optimized plan
+                # = 获取优化计划
                 # ====================================
                 if self.last_sim_step_counter == self.env.step_counter:
                     print(f"{bcolors.WARNING}sim did not step forward within last iteration (HINT: adjust action_steps_per_iter to be larger or the pos_threshold to be smaller){bcolors.ENDC}")
@@ -164,9 +163,9 @@ class Main:
                 self.last_sim_step_counter = self.env.step_counter
 
                 # ====================================
-                # = execute
+                # = 执行
                 # ====================================
-                # determine if we proceed to the next stage
+                # 确定是否进入下一个阶段
                 count = 0
                 while len(self.action_queue) > 0 and count < self.config['action_steps_per_iter']:
                     next_action = self.action_queue.pop(0)
@@ -178,16 +177,17 @@ class Main:
                         self._execute_grasp_action()
                     elif self.is_release_stage:
                         self._execute_release_action()
-                    # if completed, save video and return
+                    # 如果完成，保存视频并返回
                     if self.stage == self.program_info['num_stages']: 
                         self.env.sleep(2.0)
                         save_path = self.env.save_video()
                         print(f"{bcolors.OKGREEN}Video saved to {save_path}\n\n{bcolors.ENDC}")
                         return
-                    # progress to next stage
+                    # 进入下一个阶段
                     self._update_stage(self.stage + 1)
 
     def _get_next_subgoal(self, from_scratch):
+        # 获取下一个子目标
         subgoal_constraints = self.constraint_fns[self.stage]['subgoal']
         path_constraints = self.constraint_fns[self.stage]['path']
         subgoal_pose, debug_dict = self.subgoal_solver.solve(self.curr_ee_pose,
@@ -201,7 +201,6 @@ class Main:
                                                             self.curr_joint_pos,
                                                             from_scratch=from_scratch)
         subgoal_pose_homo = T.convert_pose_quat2mat(subgoal_pose)
-        # if grasp stage, back up a bit to leave room for grasping
         if self.is_grasp_stage:
             subgoal_pose[:3] += subgoal_pose_homo[:3, :3] @ np.array([-self.config['grasp_depth'] / 2.0, 0, 0])
         debug_dict['stage'] = self.stage
@@ -211,6 +210,7 @@ class Main:
         return subgoal_pose
 
     def _get_next_path(self, next_subgoal, from_scratch):
+        # 获取下一个路径
         path_constraints = self.constraint_fns[self.stage]['path']
         path, debug_dict = self.path_solver.solve(self.curr_ee_pose,
                                                     next_subgoal,
@@ -223,12 +223,12 @@ class Main:
                                                     from_scratch=from_scratch)
         print_opt_debug_dict(debug_dict)
         processed_path = self._process_path(path)
-        if self.visualize:
-            self.visualizer.visualize_path(processed_path)
+        # if self.visualize:
+        #     self.visualizer.visualize_path(processed_path)
         return processed_path
 
     def _process_path(self, path):
-        # spline interpolate the path from the current ee pose
+        # 对路径进行样条插值
         full_control_points = np.concatenate([
             self.curr_ee_pose.reshape(1, -1),
             path,
@@ -237,33 +237,32 @@ class Main:
                                                     self.config['interpolate_pos_step_size'],
                                                     self.config['interpolate_rot_step_size'])
         dense_path = spline_interpolate_poses(full_control_points, num_steps)
-        # add gripper action
+        # 添加夹爪动作
         ee_action_seq = np.zeros((dense_path.shape[0], 8))
         ee_action_seq[:, :7] = dense_path
         ee_action_seq[:, 7] = self.env.get_gripper_null_action()
         return ee_action_seq
 
     def _update_stage(self, stage):
-        # update stage
+        # 更新阶段
         self.stage = stage
         self.is_grasp_stage = self.program_info['grasp_keypoints'][self.stage - 1] != -1
         self.is_release_stage = self.program_info['release_keypoints'][self.stage - 1] != -1
-        # can only be grasp stage or release stage or none
-        assert self.is_grasp_stage + self.is_release_stage <= 1, "Cannot be both grasp and release stage"
-        if self.is_grasp_stage:  # ensure gripper is open for grasping stage
+        assert self.is_grasp_stage + self.is_release_stage <= 1, "不能同时是抓取和释放阶段"
+        if self.is_grasp_stage:
             self.env.open_gripper()
-        # clear action queue
         self.action_queue = []
-        # update keypoint movable mask
         self._update_keypoint_movable_mask()
         self.first_iter = True
 
     def _update_keypoint_movable_mask(self):
-        for i in range(1, len(self.keypoint_movable_mask)):  # first keypoint is ee so always movable
+        # 更新关键点可移动掩码
+        for i in range(1, len(self.keypoint_movable_mask)):
             keypoint_object = self.env.get_object_by_keypoint(i - 1)
             self.keypoint_movable_mask[i] = self.env.is_grasping(keypoint_object)
 
     def _execute_grasp_action(self):
+        # 执行抓取动作
         pregrasp_pose = self.env.get_ee_pose()
         grasp_pose = pregrasp_pose.copy()
         grasp_pose[:3] += T.quat2mat(pregrasp_pose[3:]) @ np.array([self.config['grasp_depth'], 0, 0])
@@ -271,6 +270,7 @@ class Main:
         self.env.execute_action(grasp_action, precise=True)
     
     def _execute_release_action(self):
+        # 执行释放动作
         self.env.open_gripper()
 
 if __name__ == "__main__":
@@ -285,15 +285,15 @@ if __name__ == "__main__":
         assert args.task == 'pen' and args.use_cached_query, 'disturbance sequence is only defined for cached scenario'
 
     # ====================================
-    # = pen task disturbance sequence
+    # = 笔任务干扰序列
     # ====================================
     def stage1_disturbance_seq(env):
         """
-        Move the pen in stage 0 when robot is trying to grasp the pen
+        在阶段0中移动笔，当机器人试图抓住笔时
         """
         pen = env.og_env.scene.object_registry("name", "pen_1")
         holder = env.og_env.scene.object_registry("name", "pencil_holder_1")
-        # disturbance sequence
+        # 干扰序列
         pos0, orn0 = pen.get_position_orientation()
         pose0 = np.concatenate([pos0, orn0])
         pos1 = pos0 + np.array([-0.08, 0.0, 0.0])
@@ -317,12 +317,12 @@ if __name__ == "__main__":
     
     def stage2_disturbance_seq(env):
         """
-        Take the pen out of the gripper in stage 1 when robot is trying to reorient the pen
+        在阶段1中从夹爪中取出笔，当机器人试图重新定位笔时
         """
         apply_disturbance = env.is_grasping()
         pen = env.og_env.scene.object_registry("name", "pen_1")
         holder = env.og_env.scene.object_registry("name", "pencil_holder_1")
-        # disturbance sequence
+        # 干扰序列
         pos0, orn0 = pen.get_position_orientation()
         pose0 = np.concatenate([pos0, orn0])
         pose1 = np.array([-0.30, -0.15, 0.71, -0.7071068, 0, 0, 0.7071068])
@@ -332,11 +332,11 @@ if __name__ == "__main__":
             if apply_disturbance:
                 if counter < 20:
                     if counter > 15:
-                        env.robot.release_grasp_immediately()  # force robot to release the pen
+                        env.robot.release_grasp_immediately()
                     else:
-                        pass  # do nothing for the other steps
+                        pass
                 elif counter < len(pose_seq) + 20:
-                    env.robot.release_grasp_immediately()  # force robot to release the pen
+                    env.robot.release_grasp_immediately()
                     pose = pose_seq[counter - 20]
                     pos, orn = pose[:3], pose[3:]
                     pen.set_position_orientation(pos, orn)
@@ -348,11 +348,11 @@ if __name__ == "__main__":
     
     def stage3_disturbance_seq(env):
         """
-        Move the holder in stage 2 when robot is trying to drop the pen into the holder
+        在阶段2中移动笔架，当机器人试图将笔放入笔架时
         """
         pen = env.og_env.scene.object_registry("name", "pen_1")
         holder = env.og_env.scene.object_registry("name", "pencil_holder_1")
-        # disturbance sequence
+        # 干扰序列
         pos0, orn0 = holder.get_position_orientation()
         pose0 = np.concatenate([pos0, orn0])
         pos1 = pos0 + np.array([-0.02, -0.15, 0.0])
@@ -374,7 +374,7 @@ if __name__ == "__main__":
     task_list = {
         'pen': {
             'scene_file': './configs/og_scene_file_red_pen.json',
-            'instruction': 'reorient the red pen and drop it upright into the black pen holder',
+            'instruction': 'reorient the white pen and drop it upright into the black pen holder',
             'rekep_program_dir': './vlm_query/pen',
             'disturbance_seq': {1: stage1_disturbance_seq, 2: stage2_disturbance_seq, 3: stage3_disturbance_seq},
             },
