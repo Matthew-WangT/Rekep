@@ -559,6 +559,45 @@
                 },
                 "joints": {},
                 "non_kin": {}
+            },
+            "apple_1": {
+                "root_link": {
+                    "pos": [
+                        0.0,
+                        -0.3,
+                        0.7163046002388],
+                    "ori": [-0.7071068, 0, 0, 0.7071068],
+                    "lin_vel": [0.0, 0.0, 0.0],
+                    "ang_vel": [0.0, 0.0, 0.0]
+                },
+                "joints": {},
+                "non_kin": {}
+            },
+            "box_of_almond_milk_1": {
+                "root_link": {
+                    "pos": [
+                        -0.2,
+                        -0.15,
+                        0.7163046002388],
+                    "ori": [-0.7071068, 0, 0, 0.7071068],
+                    "lin_vel": [0.0, 0.0, 0.0],
+                    "ang_vel": [0.0, 0.0, 0.0]
+                },
+                "joints": {},
+                "non_kin": {}
+            },
+            "knife_1": {
+                "root_link": {
+                    "pos": [
+                        1.0,
+                        -0.15,
+                        0.7163046002388],
+                    "ori": [-0.7071068, 0, 0, 0.7071068],
+                    "lin_vel": [0.0, 0.0, 0.0],
+                    "ang_vel": [0.0, 0.0, 0.0]
+                },
+                "joints": {},
+                "non_kin": {}
             }
         }
     },
@@ -963,6 +1002,39 @@
                         1.5,
                         1.0
                     ]
+                }
+            },
+            "apple_1": {
+                "class_module": "omnigibson.objects.dataset_object",
+                "class_name": "DatasetObject",
+                "args": {
+                    "name": "apple_1",
+                    "prim_path": "/World/apple_1",
+                    "category": "apple",
+                    "model": "agveuv",
+                    "scale": [1.0, 1.0, 1.0]
+                }
+            },
+            "box_of_almond_milk_1": {
+                "class_module": "omnigibson.objects.dataset_object",
+                "class_name": "DatasetObject",
+                "args": {
+                    "name": "box_of_almond_milk_1",
+                    "prim_path": "/World/box_of_almond_milk_1",
+                    "category": "box_of_almond_milk",
+                    "model": "oiiqwq",
+                    "scale": [0.5, 1.0, 1.0]
+                }
+            },
+            "knife_1": {
+                "class_module": "omnigibson.objects.dataset_object",
+                "class_name": "DatasetObject",
+                "args": {
+                    "name": "knife_1",
+                    "prim_path": "/World/knife_1",
+                    "category": "table_knife",
+                    "model": "lrdmpf",
+                    "scale": [1.0, 1.0, 1.0]
                 }
             }
         }

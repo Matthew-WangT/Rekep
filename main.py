@@ -374,12 +374,30 @@ if __name__ == "__main__":
     task_list = {
         'pen': {
             'scene_file': './configs/og_scene_file_red_pen.json',
-            'instruction': 'reorient the white pen and drop it upright into the black pen holder',
+            'instruction': 'reorient the red pen and drop it upright into the black pen holder',
+            'rekep_program_dir': './vlm_query/pen',
+            'disturbance_seq': {1: stage1_disturbance_seq, 2: stage2_disturbance_seq, 3: stage3_disturbance_seq},
+            },
+        'apple': {
+            'scene_file': './configs/og_scene_file_red_pen.json',
+            'instruction': 'pick up the green apple and drop it into the black pen holder',
+            'rekep_program_dir': './vlm_query/pen',
+            'disturbance_seq': {1: stage1_disturbance_seq, 2: stage2_disturbance_seq, 3: stage3_disturbance_seq},
+            },
+        'almond_milk': {
+            'scene_file': './configs/og_scene_file_red_pen.json',
+            'instruction': 'pick up the box of almond milk and drop it into the black pen holder',
+            'rekep_program_dir': './vlm_query/pen',
+            'disturbance_seq': {1: stage1_disturbance_seq, 2: stage2_disturbance_seq, 3: stage3_disturbance_seq},
+            },
+        'knife': {
+            'scene_file': './configs/og_scene_file_red_pen.json',
+            'instruction': 'pick up the knife and drop it into the black pen holder',
             'rekep_program_dir': './vlm_query/pen',
             'disturbance_seq': {1: stage1_disturbance_seq, 2: stage2_disturbance_seq, 3: stage3_disturbance_seq},
             },
     }
-    task = task_list['pen']
+    task = task_list['almond_milk']
     scene_file = task['scene_file']
     instruction = task['instruction']
     main = Main(scene_file, visualize=args.visualize)

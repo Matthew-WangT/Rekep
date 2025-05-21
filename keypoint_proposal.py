@@ -279,7 +279,7 @@ class KeypointProposer:
             features_pca = (features_pca - features_pca.min(0)[0]) / (features_pca.max(0)[0] - features_pca.min(0)[0])
             
             # 使用OpenCV可视化PCA降维后的特征
-            if features_pca.shape[0] > 0:  # 确保有数据可视化
+            if 0 and features_pca.shape[0] > 0:  # 确保有数据可视化
                 # 将特征转换为numpy数组
                 pca_features_np = features_pca.cpu().numpy()
                 
