@@ -21,7 +21,7 @@ class SAMSegmentation:
 
         # 设置输入点和标签（例如，前景点）
         input_point = np.array([[rgb_image.shape[1] // 2, rgb_image.shape[0] // 2]])
-        input_label = np.array([0])  # 1 表示前景
+        input_label = np.array([1])  # 1 表示前景
 
         # 进行预测
         masks, scores, _ = predictor.predict(
