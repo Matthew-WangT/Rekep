@@ -13,6 +13,23 @@ import torch
 from keypoint_proposal import KeypointProposer
 from sam_segment import SAMSegmentation
 
+def visualize_point_cloud(point_cloud):
+    # 确保点云数据是浮点数类型
+    if point_cloud.dtype != np.float32 and point_cloud.dtype != np.float64:
+        point_cloud = point_cloud.astype(np.float32)
+
+    # 将 (M, N, 3) 的点云数据展平为 (N, 3)
+    point_cloud_flat = point_cloud.reshape(-1, 3)
+
+    # 创建 Open3D 点云对象
+    pcd = o3d.geometry.PointCloud()
+
+    # 将 NumPy 数组转换为 Open3D 格式
+    pcd.points = o3d.utility.Vector3dVector(point_cloud_flat)
+
+    # 可视化点云
+    o3d.visualization.draw_geometries([pcd])
+
 # 配置字典
 config = {
     'device': 'cuda',
@@ -45,7 +62,7 @@ cv2.imshow("masks", masks_display)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
 # 可视化点云 
-# TODO:
+visualize_point_cloud(point_cloud)
 
 # transform to torch
 rgb_image = torch.from_numpy(rgb_image).permute(0, 1, 2).float() / 255.0
