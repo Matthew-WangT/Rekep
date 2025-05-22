@@ -310,6 +310,14 @@ class KeypointProposer:
             feature_points_torch = torch.tensor(feature_points, dtype=features_pca.dtype, device=features_pca.device)
             feature_points_torch  = (feature_points_torch - feature_points_torch.min(0)[0]) / (feature_points_torch.max(0)[0] - feature_points_torch.min(0)[0])
             X = torch.cat([X, feature_points_torch], dim=-1)
+            # 确保 num_clusters 不超过样本数量
+            num_clusters = self.config['num_candidates_per_mask']
+            if num_clusters > X.shape[0]:
+                print(f"Number of samples in X: {X.shape[0]}")
+                print(f"Number of clusters requested: {num_clusters}")
+                print(f"Number of samples in X is less than the number of clusters requested, skip this mask")
+                continue
+                # raise ValueError("Number of clusters cannot exceed number of samples.")
             # 聚类特征以获取有意义的区域
             cluster_ids_x, cluster_centers = kmeans(
                 X=X,
